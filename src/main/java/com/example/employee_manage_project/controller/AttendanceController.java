@@ -70,8 +70,7 @@ public class AttendanceController {
             )
     })
     @PutMapping("/check-out")
-    public ResponseEntity<ApiResponse<AttendanceResponseDTO>> checkOut()
-    {
+    public ResponseEntity<ApiResponse<AttendanceResponseDTO>> checkOut() throws InterruptedException {
         ApiResponse<AttendanceResponseDTO> response = new ApiResponse<>(200,"Call api successfully",attendanceService.checkOut());
         return ResponseEntity.ok(response);
     }

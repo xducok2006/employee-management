@@ -9,14 +9,18 @@ import com.example.employee_manage_project.exception.HandleNotFound;
 import com.example.employee_manage_project.repository.AttendanceRepository;
 import com.example.employee_manage_project.repository.EmployeeRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -28,6 +32,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AttendanceService {
@@ -36,7 +41,11 @@ public class AttendanceService {
     private final JwtService jwtService;
     private final RedissonLockService redissonLockService;
 
+    @Value("${server.port}")
+    private String port;
     @PreAuthorize("hasAuthority('ATTENDANCE_CHECK_IN')")
+    @Transactional
+
     public AttendanceResponseDTO checkIn() throws InterruptedException {
         String username = jwtService.getCurrentUser();
         Employee employee = employeeRepository.findEmployeeByUsername(username).orElseThrow(()->new HandleNotFound("Nhân viên không tồn tại"));
@@ -49,9 +58,10 @@ public class AttendanceService {
         if(!locked)
             throw new RuntimeException("Attendance đang được xử lý");
 
+        if(attendanceRepository.existsByEmployee_UsernameAndWorkDate(username, today))
+            throw new HandleAlreadyExists("Nhân viên đã check in hôm nay");
+
         try {
-            if(attendanceRepository.existsByEmployee_UsernameAndWorkDate(username, today))
-                throw new HandleAlreadyExists("Nhân viên đã check in hôm nay");
 
             LocalDateTime checkIn = LocalDateTime.now();
             LocalTime checkInTime = checkIn.toLocalTime();
@@ -75,25 +85,45 @@ public class AttendanceService {
         }
         finally {
             redissonLockService.unlock(lockKey);
+            log.info("UNLOCK - port={}",
+                    ((ServletRequestAttributes) RequestContextHolder
+                            .currentRequestAttributes())
+                            .getRequest()
+                            .getLocalPort());
         }
 
     }
     @PreAuthorize("hasAuthority('ATTENDANCE_CHECK_OUT')")
     @Transactional
-    public AttendanceResponseDTO checkOut(){
+    public AttendanceResponseDTO checkOut() throws InterruptedException {
         String username =jwtService.getCurrentUser();
         LocalDate today = LocalDate.now();
+        Employee employee = employeeRepository.findEmployeeByUsername(username).orElseThrow(()->new HandleNotFound("Nhân viên không tồn tại"));
+        String lockKey = "lock:attendance:"+employee.getId()+":"+today;
+
+        boolean locked = redissonLockService.tryLockWithWatchDog(lockKey,5);
+
+        if(!locked)
+            throw new RuntimeException("Attendance đang được xử lý");
+
         Attendance attendance = attendanceRepository.findByEmployee_UsernameAndWorkDate(username, today).
                 orElseThrow(()->new HandleNotFound("Nhân viên chưa check in hôm nay "));
         if(attendance.getCheckOut()!=null)
             throw new HandleAlreadyExists("Nhân viên đã check out ngày hôm nay");
-        LocalDateTime checkOutTime = LocalDateTime.now();
-        attendance.setCheckOut(checkOutTime);
-        Attendance savedAttendance = attendanceRepository.save(attendance);
-        return AttendanceResponseDTO.builder().id(savedAttendance.getId()).
-                employeeId(savedAttendance.getEmployee().getId()).employeeName(savedAttendance.getEmployee().getFullName())
-                .workDate(savedAttendance.getWorkDate()).checkIn(savedAttendance.getCheckIn()).
-                checkOut(savedAttendance.getCheckOut()).status(savedAttendance.getStatus()).lateMinutes(savedAttendance.getLateMinutes()).version(savedAttendance.getVersion()).build();
+
+        try {
+            LocalDateTime checkOutTime = LocalDateTime.now();
+            attendance.setCheckOut(checkOutTime);
+            Attendance savedAttendance = attendanceRepository.save(attendance);
+            return AttendanceResponseDTO.builder().id(savedAttendance.getId()).
+                    employeeId(savedAttendance.getEmployee().getId()).employeeName(savedAttendance.getEmployee().getFullName())
+                    .workDate(savedAttendance.getWorkDate()).checkIn(savedAttendance.getCheckIn()).
+                    checkOut(savedAttendance.getCheckOut()).status(savedAttendance.getStatus()).lateMinutes(savedAttendance.getLateMinutes()).version(savedAttendance.getVersion()).build();
+        }
+        finally {
+            redissonLockService.unlock(lockKey);
+        }
+
     }
     @PreAuthorize("hasAuthority('ATTENDANCE_READ_ALL')")
     public List<AttendanceResponseDTO> getAll()
