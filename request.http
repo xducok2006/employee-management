@@ -1,0 +1,8 @@
+### GET request to example server
+GET http://localhost:8080/attendance
+Content-Type: application/json
+Token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiIsImV4cCI6MTc4OTExNjQ4OCwiaWF0IjoxNzg5MTEyODg4LCJyb2xlcyI6WyJBRE1JTiIsIkVNUExPWUVFIiwiTUFOQUdFUiJdfQ.6vLoU3H6WynfkgL_rsE1oXaC-vz1cvAQCY3WRe33h50
+
+
+
+###
