@@ -34,19 +34,19 @@ public class AttendanceService {
     private final AttendanceRepository attendanceRepository;
     private final EmployeeRepository employeeRepository;
     private final JwtService jwtService;
-    private final RedisLockService redisLockService;
+    private final RedissonLockService redissonLockService;
+
     @PreAuthorize("hasAuthority('ATTENDANCE_CHECK_IN')")
-    public AttendanceResponseDTO checkIn()
-    {
+    public AttendanceResponseDTO checkIn() throws InterruptedException {
         String username = jwtService.getCurrentUser();
         Employee employee = employeeRepository.findEmployeeByUsername(username).orElseThrow(()->new HandleNotFound("Nhân viên không tồn tại"));
         LocalDate today = LocalDate.now();
 
         String lockKey = "lock:attendance:"+employee.getId()+":"+today;
 
-        String uuid = UUID.randomUUID().toString();
+        boolean locked = redissonLockService.tryLockWithWatchDog(lockKey,5);
 
-        if(!redisLockService.tryLock(lockKey,uuid,30L))
+        if(!locked)
             throw new RuntimeException("Attendance đang được xử lý");
 
         try {
@@ -74,7 +74,7 @@ public class AttendanceService {
                     checkOut(savedAttendance.getCheckOut()).status(savedAttendance.getStatus()).lateMinutes(savedAttendance.getLateMinutes()).version(savedAttendance.getVersion()).build();
         }
         finally {
-            redisLockService.unlock(lockKey,uuid);
+            redissonLockService.unlock(lockKey);
         }
 
     }

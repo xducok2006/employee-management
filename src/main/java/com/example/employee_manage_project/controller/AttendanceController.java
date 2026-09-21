@@ -43,8 +43,7 @@ public class AttendanceController {
             )
     })
     @PostMapping("/check-in")
-    public ResponseEntity<ApiResponse<AttendanceResponseDTO>> checkIn()
-    {
+    public ResponseEntity<ApiResponse<AttendanceResponseDTO>> checkIn() throws InterruptedException {
         ApiResponse<AttendanceResponseDTO> response = new ApiResponse<>(201,"Call api successfully",attendanceService.checkIn());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

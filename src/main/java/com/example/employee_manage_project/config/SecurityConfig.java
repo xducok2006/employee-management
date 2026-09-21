@@ -90,7 +90,7 @@ public class SecurityConfig {
         httpSecurity.authorizeHttpRequests(request ->
                 request.requestMatchers("/api/login","/api/register","/swagger-ui/**",
                                 "/swagger-ui.html",
-                                "/v3/api-docs/**","/redistest").permitAll()
+                                "/v3/api-docs/**","/test-redisson","/test-redisson/watchdog").permitAll()
                 .anyRequest().authenticated()).
                 oauth2ResourceServer(oauth2->
                 oauth2.bearerTokenResolver(bearerTokenResolver()).jwt(jwt->jwt.decoder(jwtDecoder()).jwtAuthenticationConverter(converter()))).exceptionHandling(
